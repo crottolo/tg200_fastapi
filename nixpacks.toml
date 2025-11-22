@@ -1,0 +1,14 @@
+# Nixpacks configuration for Coolify deployment
+# This tells Coolify how to build and run the FastAPI app
+
+[phases.setup]
+nixPkgs = ["python312", "python312Packages.pip"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[phases.build]
+cmds = []
+
+[start]
+cmd = "uvicorn main:app --host 0.0.0.0 --port 3000"
