@@ -6,13 +6,15 @@ class SMSRequest(BaseModel):
     phone: str = Field(..., description="Destination phone number (e.g., +393935873723)")
     message: str = Field(..., description="SMS text content", min_length=1, max_length=160)
     span: Optional[str] = Field(default="2", description="GSM span/port (2 or 3)")
+    sms_id: Optional[str] = Field(default=None, description="Custom SMS ID for tracking (auto-generated if not provided)", max_length=50)
 
     class Config:
         json_schema_extra = {
             "example": {
                 "phone": "+393935873723",
                 "message": "Test message",
-                "span": "2"
+                "span": "2",
+                "sms_id": "order-12345"
             }
         }
 

@@ -48,14 +48,16 @@ class TG200Service:
             print(f"Login error: {e}")
             return False
 
-    def send_sms(self, phone: str, message: str, span: str = None) -> tuple[bool, Optional[str]]:
+    def send_sms(self, phone: str, message: str, span: str = None, sms_id: str = None) -> tuple[bool, Optional[str]]:
         if not self.connected:
             return False, None
 
         if span is None:
             span = settings.tg200_default_span
 
-        sms_id = str(uuid.uuid4())[:8]
+        # Generate SMS ID if not provided
+        if sms_id is None:
+            sms_id = str(uuid.uuid4())[:8]
 
         command = f'Action: smscommand\r\ncommand: gsm send sms {span} {phone} "{message}" {sms_id}\r\n\r\n'
 

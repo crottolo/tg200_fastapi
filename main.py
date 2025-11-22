@@ -140,7 +140,8 @@ def send_sms(
             success, sms_id = tg200.send_sms(
                 phone=request.phone,
                 message=request.message,
-                span=request.span
+                span=request.span,
+                sms_id=request.sms_id
             )
 
             if success:

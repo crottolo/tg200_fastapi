@@ -157,6 +157,8 @@ curl -H "Authorization: Bearer your-secret-token-here" \
 ```
 
 ### 3. Invio SMS
+
+**Invio semplice** (SMS ID auto-generato):
 ```bash
 curl -X POST http://localhost:8000/sms/send \
   -H "Authorization: Bearer your-secret-token-here" \
@@ -166,6 +168,28 @@ curl -X POST http://localhost:8000/sms/send \
     "message": "Test message",
     "span": "2"
   }'
+```
+
+**Invio con SMS ID personalizzato** (utile per tracking):
+```bash
+curl -X POST http://localhost:8000/sms/send \
+  -H "Authorization: Bearer your-secret-token-here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phone": "+393935873723",
+    "message": "Order confirmation #12345",
+    "span": "2",
+    "sms_id": "order-12345"
+  }'
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "SMS sent successfully to +393935873723",
+  "sms_id": "order-12345"
+}
 ```
 
 ### 4. Test Webhook
@@ -190,7 +214,8 @@ Una volta avviato il server, la documentazione interattiva è disponibile:
 ## Esempi
 
 Nella cartella `examples/` trovi:
-- `send_sms.json` - Esempio payload per invio SMS
+- `send_sms.json` - Esempio payload per invio SMS (sms_id auto-generato)
+- `send_sms_with_id.json` - Esempio payload con SMS ID personalizzato
 - `incoming_webhook.json` - Esempio payload webhook in entrata
 - `test_requests.sh` - Script per testare tutti gli endpoint
 
@@ -219,6 +244,20 @@ command: gsm send sms {span} {phone} "{message}" {id}
 
 ### Span Disponibili
 Sul TG200 configurato sono disponibili solo gli span 2 e 3 (nessun span 1).
+
+### SMS ID Personalizzato
+Il campo opzionale `sms_id` permette di tracciare l'origine del messaggio:
+
+**Casi d'uso:**
+- **E-commerce**: Collegare SMS a ordini specifici (`order-12345`)
+- **Notifiche**: Identificare il tipo di alert (`payment-notification-789`)
+- **Tracking**: Correlazione con sistemi esterni (`crm-lead-456`)
+- **Debugging**: Facilitare il troubleshooting
+
+**Comportamento:**
+- Se non fornito → auto-generato (UUID a 8 caratteri)
+- Se fornito → usato direttamente (max 50 caratteri)
+- Sempre restituito nella response per conferma
 
 ## Struttura Progetto
 
