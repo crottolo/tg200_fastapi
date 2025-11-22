@@ -22,12 +22,12 @@ COPY main.py .
 # Make sure scripts are in PATH
 ENV PATH=/root/.local/bin:$PATH
 
-# Expose port (Coolify default is 3000)
-EXPOSE 3000
+# Expose port (FastAPI default is 8000)
+EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:3000/')"
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"
 
 # Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

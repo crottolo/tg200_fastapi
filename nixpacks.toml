@@ -1,5 +1,6 @@
 # Nixpacks configuration for Coolify deployment
-# This tells Coolify how to build and run the FastAPI app
+# FastAPI default port is 8000
+# IMPORTANT: In Coolify UI, set "Ports Exposes" to 8000 in Network section
 
 [phases.setup]
 nixPkgs = ["python312", "python312Packages.pip"]
@@ -11,4 +12,4 @@ cmds = ["pip install -r requirements.txt"]
 cmds = []
 
 [start]
-cmd = "uvicorn main:app --host 0.0.0.0 --port 3000"
+cmd = "uvicorn main:app --host 0.0.0.0 --port 8000"

@@ -22,7 +22,7 @@ X-Forwarded-Host: hostname originale
 
 ```nginx
 location / {
-    proxy_pass http://localhost:3000;
+    proxy_pass http://localhost:8000;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Forwarded-Host $host;
@@ -34,73 +34,81 @@ location / {
 
 Coolify configura automaticamente il reverse proxy. L'app è pronta all'uso.
 
-## Deploy su Coolify - Step by Step
+## Deploy su Coolify con Nixpacks
 
-### Metodo Consigliato: Docker Compose
+Coolify usa **Nixpacks** per buildare automaticamente l'app FastAPI. Nixpacks rileva il progetto Python e costruisce il container automaticamente.
 
-Il progetto include un `docker-compose.yml` che Coolify rileva automaticamente. Questo è il metodo **più semplice** perché:
-- ✅ Coolify rileva automaticamente tutte le variabili d'ambiente
-- ✅ Valori di default già configurati
-- ✅ Variabili obbligatorie marcate con `:?`
-- ✅ Devi modificare solo `API_BEARER_TOKEN` e `WEBHOOK_URL`
+### 1. Crea Nuova Application
 
-### 1. Crea Nuova Resource
-
-1. In Coolify, vai su **Projects** → seleziona il tuo progetto
-2. Click su **+ New Resource**
-3. Seleziona **Docker Compose** (NON "Docker")
+1. In Coolify → **Projects** → seleziona il tuo progetto
+2. Click **+ New Resource**
+3. Seleziona **Application** (NON Docker Compose)
 4. Scegli **Git Repository**
-5. Inserisci URL del repository
-6. Seleziona branch (main/master)
+5. Inserisci: `https://github.com/crottolo/tg200_fastapi`
+6. Branch: `main`
 
-### 2. Coolify Rileva le Variabili Automaticamente
+### 2. Configura Build Pack
 
-Dopo aver selezionato il repository, Coolify:
-1. Legge il `docker-compose.yml`
-2. Rileva tutte le variabili `${VARIABLE_NAME}`
-3. Le mostra nella tab **Environment Variables**
+Coolify rileva automaticamente **Nixpacks** grazie al file `nixpacks.toml`.
 
-### 3. Configura Solo le Variabili Obbligatorie
+- ✅ **Build Pack**: Nixpacks (auto-detected)
+- ✅ **Start Command**: `uvicorn main:app --host 0.0.0.0 --port 8000` (da nixpacks.toml)
 
-Coolify ti chiederà di impostare solo le variabili **OBBLIGATORIE** (quelle con `:?`):
+### 3. Configura Porta (IMPORTANTE!)
 
-**⚠️ DA CONFIGURARE:**
+**In Coolify UI → Network Section:**
+- **Ports Exposes**: `8000` (⚠️ IMPORTANTE: FastAPI default port)
+
+Se non configuri la porta corretta, l'app non sarà raggiungibile!
+
+### 4. Configura Environment Variables
+
+Vai alla tab **Environment Variables** e aggiungi **TUTTE** le variabili:
+
 ```bash
-TG200_HOST=37.117.57.200          # IP del tuo TG200
-TG200_USERNAME=apiuser             # Username AMI
-TG200_PASSWORD=apipass             # Password AMI
-API_BEARER_TOKEN=YOUR-SECRET-TOKEN # ⚠️ CAMBIA QUESTO!
-WEBHOOK_URL=https://your-webhook.com/endpoint  # URL webhook destinazione
+# TG200 Gateway Configuration (OBBLIGATORIE)
+TG200_HOST=37.117.57.200
+TG200_PORT=5038
+TG200_USERNAME=apiuser
+TG200_PASSWORD=apipass
+TG200_DEFAULT_SPAN=2
+
+# API Security (⚠️ CAMBIA QUESTO!)
+API_BEARER_TOKEN=your-secret-token-here
+
+# Webhook Configuration
+WEBHOOK_URL=https://your-webhook-endpoint.com/webhook
+WEBHOOK_ENABLED=true
+
+# Webhook Advanced (OPZIONALI)
+WEBHOOK_TIMEOUT=5.0
+WEBHOOK_RETRY=0
+WEBHOOK_SEND_ALL_EVENTS=true
+WEBHOOK_SEND_KEEPALIVE=false
 ```
 
-**✅ GIÀ CONFIGURATE (default nel compose file):**
-```bash
-TG200_PORT=5038                    # Porta AMI (default)
-TG200_DEFAULT_SPAN=2               # Span GSM di default
-WEBHOOK_ENABLED=true               # Webhook abilitato
-WEBHOOK_TIMEOUT=5.0                # Timeout 5 secondi
-WEBHOOK_RETRY=0                    # Nessun retry
-WEBHOOK_SEND_ALL_EVENTS=true      # Invia tutti gli eventi
-WEBHOOK_SEND_KEEPALIVE=false      # NON inviare Ping/Pong (consigliato)
-```
-
-**💡 Tip**: Se vuoi cambiare i valori di default, puoi modificarli nell'UI di Coolify.
-
-### 4. Deploy
+### 5. Deploy
 
 Click **Deploy** - Coolify:
-1. Clona il repository
-2. Builda l'immagine Docker
-3. Avvia il container
+1. Clona il repository da GitHub
+2. Nixpacks builda automaticamente l'immagine
+3. Avvia il container sulla porta 8000
 4. Configura il reverse proxy automaticamente
+5. L'app è live!
 
-### 5. Verifica
+### 6. Verifica Deploy
 
-Dopo il deploy:
-1. Controlla i **Logs** in Coolify
-2. Cerca `AMI LISTENER STARTED - Logging all events from TG200`
-3. Ogni 25 secondi: `Keepalive ping sent`
-4. Testa l'endpoint: `curl https://your-domain.com/`
+Dopo il deploy, controlla i **Logs** in Coolify:
+```
+AMI LISTENER STARTED - Logging all events from TG200
+AMI KEEPALIVE ENABLED - Ping every 25 seconds
+```
+
+Testa l'endpoint:
+```bash
+curl https://your-domain.com/
+# Output: {"status":"ok","message":"TG200 FastAPI Gateway"}
+```
 
 ### Troubleshooting Deploy
 
@@ -159,54 +167,7 @@ Quando riceve un SMS, invia POST al webhook configurato:
 }
 ```
 
-## Variabili d'Ambiente per Coolify
-
-### Come Configurare in Coolify
-
-1. Vai alla tua **Resource** (Application) in Coolify
-2. Click su tab **"Environment Variables"**
-3. Click **"Add Variable"** per ogni variabile
-4. Copia/incolla le variabili qui sotto
-5. **⚠️ IMPORTANTE: Modifica `API_BEARER_TOKEN` con un token sicuro!**
-
-### Variabili OBBLIGATORIE
-
-```bash
-# TG200 Gateway Configuration
-TG200_HOST=37.117.57.200
-TG200_PORT=5038
-TG200_USERNAME=apiuser
-TG200_PASSWORD=apipass
-TG200_DEFAULT_SPAN=2
-
-# API Security (⚠️ CAMBIA QUESTO!)
-API_BEARER_TOKEN=your-secret-token-here
-
-# Webhook Configuration
-WEBHOOK_URL=https://your-webhook-endpoint.com/webhook
-WEBHOOK_ENABLED=true
-```
-
-### Variabili OPZIONALI (Configurazione Avanzata Webhook)
-
-```bash
-# Webhook Timeout & Retry
-WEBHOOK_TIMEOUT=5.0              # Timeout in secondi (default: 5.0)
-WEBHOOK_RETRY=0                  # Numero di retry su errore (default: 0, max: 3)
-
-# Webhook Event Filtering
-WEBHOOK_SEND_ALL_EVENTS=true    # Invia TUTTI gli eventi AMI al webhook (default: true)
-WEBHOOK_SEND_KEEPALIVE=false    # Invia eventi Ping/Pong keepalive (default: true, consigliato: false)
-```
-
-### Note sulle Variabili
-
-- **WEBHOOK_SEND_KEEPALIVE**: Imposta `false` per evitare spam di Ping/Pong ogni 25 secondi
-- **WEBHOOK_RETRY**: Utile se il tuo webhook è instabile (0 = nessun retry)
-- **WEBHOOK_TIMEOUT**: Evita che webhook lenti blocchino l'app
-- Le variabili in Coolify sono sicure e non vengono salvate nel repository Git
-
-## Test in Produzione
+## Test API in Produzione
 
 ```bash
 # Health check
