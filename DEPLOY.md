@@ -22,7 +22,7 @@ X-Forwarded-Host: hostname originale
 
 ```nginx
 location / {
-    proxy_pass http://localhost:8000;
+    proxy_pass http://localhost:3000;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Forwarded-Host $host;
@@ -52,14 +52,8 @@ Coolify usa **Nixpacks** per buildare automaticamente l'app FastAPI. Nixpacks ri
 Coolify rileva automaticamente **Nixpacks** grazie al file `nixpacks.toml`.
 
 - ✅ **Build Pack**: Nixpacks (auto-detected)
-- ✅ **Start Command**: `uvicorn main:app --host 0.0.0.0 --port 8000` (da nixpacks.toml)
-
-### 3. Configura Porta (IMPORTANTE!)
-
-**In Coolify UI → Network Section:**
-- **Ports Exposes**: `8000` (⚠️ IMPORTANTE: FastAPI default port)
-
-Se non configuri la porta corretta, l'app non sarà raggiungibile!
+- ✅ **Start Command**: `uvicorn main:app --host 0.0.0.0 --port 3000` (da nixpacks.toml)
+- ✅ **Port**: 3000 (Coolify default - configurato automaticamente)
 
 ### 4. Configura Environment Variables
 
