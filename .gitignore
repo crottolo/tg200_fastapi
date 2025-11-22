@@ -29,6 +29,9 @@ env/
 # Environment variables
 .env
 
+# Sensitive files with hardcoded credentials
+tg200_sms_sender.py
+
 # IDE
 .vscode/
 .idea/
