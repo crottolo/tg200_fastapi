@@ -33,6 +33,11 @@ class AMIEventListener:
         self.keepalive_interval = 25  # Send keepalive every 25 seconds
         self.last_activity = datetime.now()
 
+        # Reconnect settings
+        self.reconnect_delay = 5  # Initial delay in seconds
+        self.max_reconnect_delay = 60  # Max delay between reconnects
+        self.stable_connection_time = 120  # Seconds to consider connection stable (reset backoff)
+
     async def connect(self) -> bool:
         """Establish AMI connection with TCP keepalive"""
         try:
@@ -143,88 +148,121 @@ class AMIEventListener:
             logger.error(f"Keepalive error: {e}")
 
     async def listen(self):
-        """Main event listening loop with keepalive - logs ALL events received"""
-        if not self.connected:
-            if not await self.connect():
-                logger.error("Failed to connect to AMI")
-                return
-
+        """Main event listening loop with keepalive and auto-reconnect"""
         self.running = True
-        logger.info("=" * 70)
-        logger.info("AMI LISTENER STARTED - Logging all events from TG200")
-        logger.info("AMI KEEPALIVE ENABLED - Ping every %d seconds", self.keepalive_interval)
-        logger.info("=" * 70)
+        current_backoff = self.reconnect_delay
 
-        try:
-            while self.running:
-                # Check if we need to send keepalive
-                time_since_activity = (datetime.now() - self.last_activity).total_seconds()
-                if time_since_activity > self.keepalive_interval:
-                    await self._send_keepalive()
-                    self.last_activity = datetime.now()
+        while self.running:
+            # Try to connect if not connected
+            if not self.connected:
+                logger.info(f"Attempting to connect to AMI at {self.host}:{self.port}...")
+                if not await self.connect():
+                    logger.warning(f"Connection failed. Retrying in {current_backoff}s...")
+                    await asyncio.sleep(current_backoff)
+                    # Exponential backoff
+                    current_backoff = min(current_backoff * 2, self.max_reconnect_delay)
+                    continue
 
-                # Try to receive data (non-blocking)
-                event_data = await asyncio.to_thread(self._recv_response_nonblocking)
+                # Connection successful, reset backoff
+                current_backoff = self.reconnect_delay
+                logger.info("=" * 70)
+                logger.info("AMI LISTENER STARTED - Logging all events from TG200")
+                logger.info("AMI KEEPALIVE ENABLED - Ping every %d seconds", self.keepalive_interval)
+                logger.info("AUTO-RECONNECT ENABLED - Backoff: %d-%ds", self.reconnect_delay, self.max_reconnect_delay)
+                logger.info("=" * 70)
 
-                if event_data:
-                    # Log RAW event data
-                    logger.info("\n" + "=" * 70)
-                    logger.info("RAW EVENT DATA RECEIVED:")
-                    logger.info("-" * 70)
-                    logger.info(event_data)
-                    logger.info("=" * 70 + "\n")
+            connection_start = datetime.now()
 
-                    # Parse event
-                    event = self._parse_event(event_data)
+            try:
+                await self._event_loop()
+            except Exception as e:
+                logger.error(f"AMI Listener error: {e}", exc_info=True)
 
-                    if event:
-                        # Check if it's a Pong response (different format)
-                        if 'ping' in event and event.get('ping', '').lower() == 'pong':
-                            # It's a Pong keepalive response
-                            event['event'] = 'Pong'  # Add event type
-                            logger.debug("Keepalive pong received")
-
-                            # Log PARSED event
-                            logger.info("PARSED EVENT:")
-                            logger.info(json.dumps(event, indent=2, ensure_ascii=False))
-                            logger.info("=" * 70 + "\n")
-
-                            if settings.webhook_send_keepalive:
-                                await self._send_generic_event_webhook(event, "keepalive")
-
-                        elif event.get('event'):
-                            # Standard AMI event with 'Event:' field
-                            # Log PARSED event
-                            logger.info("PARSED EVENT:")
-                            logger.info(json.dumps(event, indent=2, ensure_ascii=False))
-                            logger.info("=" * 70 + "\n")
-
-                            # Handle specific events
-                            event_type = event.get('event', '').lower()
-
-                            if event_type == 'receivedsms':
-                                logger.info(">>> INCOMING SMS DETECTED <<<")
-                                await self._handle_received_sms(event)
-
-                            # Send ALL events to webhook if configured
-                            if settings.webhook_send_all_events and event_type not in ['receivedsms']:
-                                await self._send_generic_event_webhook(event, "ami_event")
-
-                            # Call custom callback
-                            if self.on_event_callback:
-                                await self.on_event_callback(event)
-                        else:
-                            # Other responses (Response: Success, etc.)
-                            logger.debug(f"Non-event response: {event}")
-                else:
-                    # No data available, sleep briefly
-                    await asyncio.sleep(0.5)
-
-        except Exception as e:
-            logger.error(f"AMI Listener error: {e}", exc_info=True)
-        finally:
-            self.running = False
+            # Connection lost - cleanup
             self.disconnect()
+
+            if not self.running:
+                break
+
+            # Check if connection was stable enough to reset backoff
+            connection_duration = (datetime.now() - connection_start).total_seconds()
+            if connection_duration >= self.stable_connection_time:
+                current_backoff = self.reconnect_delay
+                logger.info("Connection was stable, resetting backoff")
+            else:
+                logger.warning(f"Connection lasted only {connection_duration:.0f}s")
+
+            logger.warning(f"Connection lost. Reconnecting in {current_backoff}s...")
+            await asyncio.sleep(current_backoff)
+            current_backoff = min(current_backoff * 2, self.max_reconnect_delay)
+
+        logger.info("AMI Listener stopped")
+
+    async def _event_loop(self):
+        """Internal event processing loop"""
+        while self.running and self.connected:
+            # Check if we need to send keepalive
+            time_since_activity = (datetime.now() - self.last_activity).total_seconds()
+            if time_since_activity > self.keepalive_interval:
+                await self._send_keepalive()
+                self.last_activity = datetime.now()
+
+            # Try to receive data (non-blocking)
+            event_data = await asyncio.to_thread(self._recv_response_nonblocking)
+
+            if event_data:
+                # Log RAW event data
+                logger.info("\n" + "=" * 70)
+                logger.info("RAW EVENT DATA RECEIVED:")
+                logger.info("-" * 70)
+                logger.info(event_data)
+                logger.info("=" * 70 + "\n")
+
+                # Parse event
+                event = self._parse_event(event_data)
+
+                if event:
+                    # Check if it's a Pong response (different format)
+                    if 'ping' in event and event.get('ping', '').lower() == 'pong':
+                        # It's a Pong keepalive response
+                        event['event'] = 'Pong'  # Add event type
+                        logger.debug("Keepalive pong received")
+
+                        # Log PARSED event
+                        logger.info("PARSED EVENT:")
+                        logger.info(json.dumps(event, indent=2, ensure_ascii=False))
+                        logger.info("=" * 70 + "\n")
+
+                        if settings.webhook_send_keepalive:
+                            await self._send_generic_event_webhook(event, "keepalive")
+
+                    elif event.get('event'):
+                        # Standard AMI event with 'Event:' field
+                        # Log PARSED event
+                        logger.info("PARSED EVENT:")
+                        logger.info(json.dumps(event, indent=2, ensure_ascii=False))
+                        logger.info("=" * 70 + "\n")
+
+                        # Handle specific events
+                        event_type = event.get('event', '').lower()
+
+                        if event_type == 'receivedsms':
+                            logger.info(">>> INCOMING SMS DETECTED <<<")
+                            await self._handle_received_sms(event)
+
+                        # Send ALL events to webhook if configured
+                        if settings.webhook_send_all_events and event_type not in ['receivedsms']:
+                            await self._send_generic_event_webhook(event, "ami_event")
+
+                        # Call custom callback
+                        if self.on_event_callback:
+                            await self.on_event_callback(event)
+                    else:
+                        # Other responses (Response: Success, etc.)
+                        logger.debug(f"Non-event response: {event}")
+            else:
+                # No data available, sleep briefly
+                await asyncio.sleep(0.5)
 
     def _parse_event(self, event_data: str) -> dict:
         """Parse AMI event string to dictionary"""
