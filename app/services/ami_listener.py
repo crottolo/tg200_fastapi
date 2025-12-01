@@ -4,7 +4,7 @@ import httpx
 import json
 from datetime import datetime
 from typing import Optional, Callable
-from urllib.parse import unquote
+from urllib.parse import unquote_plus
 from app.config import settings
 import logging
 
@@ -272,9 +272,9 @@ class AMIEventListener:
                 key, value = line.split(':', 1)
                 event[key.strip().lower()] = value.strip()
 
-        # URL decode content if present
+        # URL decode content if present (unquote_plus also converts + to space)
         if 'content' in event:
-            event['content'] = unquote(event['content'])
+            event['content'] = unquote_plus(event['content'])
 
         return event
 
